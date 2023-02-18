@@ -1,2 +1,1 @@
-# appsScripts
-appsScripts for Google Works
+# googleAppsScript
