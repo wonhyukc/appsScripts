@@ -1,0 +1,66 @@
+// 정원혁 230227 debug추가
+
+// src로 부터 dst로 prtn에 해당하는 파일을 복사한다.
+// sub폴더가 있으면 그것도 모두
+// src, dst: folder의 ID
+// ptrn: 복사할 파일의 패턴. 예) Copy of, 의 사본
+// debug: true, false. 동작 하는 동안 console.log 출력여부
+
+function myFunction() {
+  console.log('myFunction-moving files refactored');
+  const hyuk_tmp = '1npMH-';
+  const lect_4th = '19DwDc';
+  const debug = true; // consol.log 출력을 보고 싶으면 true 아니면 false
+
+  // Get the source and destination folders by ID
+  const src = getFolderById(lect_4th, debug);
+  const dst = getFolderById(hyuk_tmp, debug);  
+
+  // If both folders were successfully retrieved, start copying  
+  if (src && dst) {
+    if (debug) {console.log ('원본 대상 모두 OK. 원본폴더: '|| src.getName(), '대상폴더:', dst.getName());}    
+    copyFolders(src, dst, '의 사본', debug);
+  }
+}
+
+
+function copyFolders(src, dst, ptrn, debug) {
+  // Get all subfolders of the source folder
+  const folders = src.getFolders();
+  if (debug) {console.log('copyFolders 에 진입');}
+  // For each subfolder, create a corresponding subfolder in the destination folder and copy its files
+  while (folders.hasNext()) {
+    if (debug) {console.log('copyFolders. while 에 진입');}
+    const folder = folders.next();
+    const dstSubFolder = dst.createFolder(folder.getName());
+    copyFiles(folder, dstSubFolder, ptrn);
+    copyFolders(folder, dstSubFolder, ptrn);
+  }
+}
+
+function copyFiles(src, dst, ptrn, debug) {
+  // Get all files in the source folder
+  const files = src.getFiles();
+  console.log('copyFiles', files.hasNext(), files);
+  // For each file, check if its name contains the specified pattern, and if so, make a copy in the destination folder
+  while (files.hasNext()) {
+    const file = files.next();
+    if (debug) {console.log('copyFiles. while 에 진입');}
+    if (file.getName().indexOf(ptrn) !== -1) {
+      if (debug) {console.log('copying:', file.getName());}      
+      file.makeCopy(file.getName(), dst);
+    }
+  }
+}
+
+function getFolderById(folderId, debug) {
+  // Try to retrieve a folder with the specified ID; if an error occurs, return null
+  try {
+    const f = DriveApp.getFolderById(folderId)
+    if (debug) {      console.log ('folderId:', folderId, 'folder.getName:', f.getName());      }
+    return f;
+  } catch(e) {
+     if (debug) {       console.log ('folderId:', folderId, 'Error: 아마도 폴더 없거나 접근 불가', e);      }
+    return null;
+  }
+}
