@@ -3,18 +3,16 @@
  */
 
 // --- Configuration ---
-const SHEET_NAME = "USD_fifo"; // 실제 시트 이름으로 변경하세요.
-const HEADER_ROW = 2;       // 헤더 행 번호 (데이터는 이 행 아래부터 시작)
-const COL_C_AMOUNT = 3;     // C열 (외화 금액)
-const COL_D_RATE = 4;       // D열 (환율)
-const COL_E_KRW = 5;        // E열 (원화 금액)
-const COL_F_BALANCE = 6;    // F열 (외화 총잔액 - 새로운 위치, 스크립트가 값을 씀)
-const COL_G_REMAINING = 7;  // G열 (FIFO 후 남은 잔액)
-const COL_H_FIFO_COST = 8;  // H열 (FIFO 원가)
-const COL_I_PROFIT_LOSS = 9; // I열 (환차손익)
-// J열은 메모 (스크립트에서 사용 안 함)
-// K열은 krw잔고 (스크립트에서 직접 계산하거나 사용 안 함, E열 기반으로 계산될 수 있음)
-const RESET_THRESHOLD = 0.3; // 리셋 기준 값 (F열)
+const SHEET_NAME = "USD_fifo";
+const HEADER_ROW = 2;
+const COL_C_AMOUNT = 3;
+const COL_D_RATE = 4;
+const COL_E_KRW = 5;
+const COL_F_BALANCE = 6;
+const COL_G_REMAINING = 7;
+const COL_H_FIFO_COST = 8;
+const COL_I_PROFIT_LOSS = 9;
+const RESET_THRESHOLD = 0.000001; // <<<<<< 수정: 리셋 기준 값을 매우 작게 변경 (거의 0일 때만 리셋)
 // --- End Configuration ---
 
 
@@ -193,61 +191,76 @@ function calculateFIFO(data) {
         originalQty: amount, rate: rate, remainingQty: amount, rowIndex: currentRowIndexInData
       });
       hValue = null; iValue = null; // 매수 건은 FIFO 원가, 환차손익 없음
+    }
+    else if (amount < 0) { // 매도 건
+    Logger.log("--- Processing Sell Row: " + currentRowInSheet + ", Amount: " + amount + ", amountToCover: " + Math.abs(amount) + " ---");
+    // 리셋 이후의 유효한 buyLots만 로그에 표시 (JSON.stringify로 객체 내부까지)
+    Logger.log("BuyLots state BEFORE processing sell (filtered by currentLastResetIndex " + currentLastResetIndex + "): " +
+               JSON.stringify(buyLots.filter(lot => lot.rowIndex > currentLastResetIndex).map(l => ({...l, remainingQty: l.remainingQty.toPrecision(10)})))); // 소수점 정밀도 높여서 로깅
 
-    } else if (amount < 0) { // 매도 건
-        Logger.log("--- Processing Sell Row: " + currentRowInSheet + ", Amount: " + amount + " ---");
-        // 리셋 이후의 유효한 buyLots만 로그에 표시
-        Logger.log("BuyLots state BEFORE processing sell (filtered by currentLastResetIndex): " + JSON.stringify(buyLots.filter(lot => lot.rowIndex > currentLastResetIndex)));
-        Logger.log("Using Last Reset Row Index for calculation: " + currentLastResetIndex);
+    const amountToCover = Math.abs(amount);
+    let totalFifoCost = 0;
+    let remainingSellQty = amountToCover;
+    let foundExactMatch = false;
 
-      const amountToCover = Math.abs(amount); // 양수로 변환
-      let totalFifoCost = 0;
-      let remainingSellQty = amountToCover;
-      let foundExactMatch = false;
-
-      // [1] 같은 금액 매칭 시도 (리셋 이후의 건들만 고려)
-      Logger.log("Checking for exact match...");
-      // buyLots 배열을 순회하며, 리셋 이후의 유효한 로트만 검사
-      for (let lotIndex = 0; lotIndex < buyLots.length; lotIndex++) {
+    // [1] 같은 금액 매칭 시도 (리셋 이후의 건들만 고려)
+    Logger.log("Checking for exact match for amount: " + amountToCover.toPrecision(10));
+    for (let lotIndex = 0; lotIndex < buyLots.length; lotIndex++) {
         let lot = buyLots[lotIndex];
-        // 리셋 이후의, 아직 남아있고, 원본수량==매도량, 남은수량==원본수량 인 건
-        if (lot.rowIndex > currentLastResetIndex && // 리셋 지점보다 나중에 발생한 매수 건만 고려
+        Logger.log(" Exact match: Checking lot from rowIndex " + lot.rowIndex +
+                   " (originalQty: " + lot.originalQty.toPrecision(10) +
+                   ", remainingQty: " + lot.remainingQty.toPrecision(10) +
+                   ", rate: " + lot.rate + ")");
+        if (lot.rowIndex > currentLastResetIndex &&
             lot.remainingQty > 0 &&
-            lot.originalQty === amountToCover &&
-            lot.remainingQty === lot.originalQty)
+            // 부동소수점 비교 시 오차 감안
+            Math.abs(lot.originalQty - amountToCover) < 0.000001 &&
+            Math.abs(lot.remainingQty - lot.originalQty) < 0.000001)
         {
-          totalFifoCost = amountToCover * lot.rate;
-          lot.remainingQty = 0; // 해당 로트 모두 소진
-          remainingSellQty = 0; // 매도 금액 모두 처리
-          foundExactMatch = true;
-          Logger.log(" Exact match FOUND! Consumed lot from row index " + lot.rowIndex + ". Calculated Cost: " + totalFifoCost);
-          break; // 정확한 매칭을 찾았으므로 더 이상 로트 순회 필요 없음
+            totalFifoCost = amountToCover * lot.rate;
+            lot.remainingQty = 0;
+            remainingSellQty = 0;
+            foundExactMatch = true;
+            Logger.log(" Exact match FOUND! Consumed lot from rowIndex " + lot.rowIndex +
+                       ". Calculated Cost: " + totalFifoCost.toPrecision(10) +
+                       ". Remaining sell qty: " + remainingSellQty.toPrecision(10));
+            break;
         }
-      }
+    }
 
-      // [2] 표준 FIFO 처리 (같은 금액 매칭 실패 시)
-      if (!foundExactMatch) {
-        Logger.log("Exact match not found. Starting standard FIFO...");
-        // buyLots 배열을 순회하며, 리셋 이후의 유효한 로트만 FIFO 처리
+    // [2] 표준 FIFO 처리 (같은 금액 매칭 실패 시)
+    if (!foundExactMatch) {
+        Logger.log("Exact match not found or not applicable. Starting standard FIFO for amount: " + remainingSellQty.toPrecision(10));
         for (let lotIndex = 0; lotIndex < buyLots.length; lotIndex++) {
-          let lot = buyLots[lotIndex];
-          // 리셋 이후의, 아직 남아있는 매수 건
-          if (lot.rowIndex > currentLastResetIndex && lot.remainingQty > 0) {
-            const consumeAmount = Math.min(remainingSellQty, lot.remainingQty);
-            if (consumeAmount > 0) {
-                totalFifoCost += consumeAmount * lot.rate;
-                lot.remainingQty -= consumeAmount;
-                remainingSellQty -= consumeAmount;
-                Logger.log(" FIFO: Consumed " + consumeAmount + " from lot at index " + lot.rowIndex +
-                           ". Remaining sell qty: " + remainingSellQty + ". Lot remaining qty: " + lot.remainingQty);
+            let lot = buyLots[lotIndex];
+            if (lot.rowIndex > currentLastResetIndex && lot.remainingQty > 0) {
+                Logger.log("  Standard FIFO: Considering lot from rowIndex " + lot.rowIndex +
+                           " (originalQty: " + lot.originalQty.toPrecision(10) +
+                           ", remainingQty: " + lot.remainingQty.toPrecision(10) +
+                           ", rate: " + lot.rate + ")");
+
+                const consumeAmount = Math.min(remainingSellQty, lot.remainingQty);
+                if (consumeAmount > 0.0000001) { // 매우 작은 값은 무시
+                    totalFifoCost += consumeAmount * lot.rate;
+                    lot.remainingQty -= consumeAmount;
+                    remainingSellQty -= consumeAmount;
+                    Logger.log("  FIFO: Consumed " + consumeAmount.toPrecision(10) +
+                               " from lot at rowIndex " + lot.rowIndex +
+                               ". New lot remaining qty: " + lot.remainingQty.toPrecision(10) +
+                               ". Remaining sell qty: " + remainingSellQty.toPrecision(10));
+                }
             }
-          }
-          if (remainingSellQty <= 0.000001) { // 부동 소수점 오차 처리 (거의 0이면 0으로 간주)
+            if (remainingSellQty < 0.000001) { // 부동 소수점 오차 처리 (거의 0이면 0으로 간주)
                 remainingSellQty = 0;
-                break; // 매도 금액 모두 처리되었으므로 중단
-          }
+                Logger.log("  Remaining sell qty is close to zero, setting to 0. Breaking FIFO loop.");
+                break;
+            }
         }
-      }
+    }
+    
+
+
+
 
       // H열 (FIFO 원가) 및 I열 (환차손익) 값 결정
       if (remainingSellQty > 0) { // 매도 금액을 모두 처리하지 못한 경우
@@ -264,6 +277,7 @@ function calculateFIFO(data) {
               iValue = "#ERROR";
               Logger.log("Error calculating I value for row " + currentRowInSheet + ". E=" + krwAmount + ", H=" + hValue);
         }
+        Logger.log("Successfully covered sell. Total FIFO Cost (hValue): " + (hValue ? hValue.toPrecision(10) : hValue) +", Profit/Loss (iValue): " + (iValue ? iValue.toPrecision(10) : iValue));
       }
         Logger.log("Final H value for row " + currentRowInSheet + ": " + hValue);
         Logger.log("Final I value for row " + currentRowInSheet + ": " + iValue);
@@ -277,17 +291,16 @@ function calculateFIFO(data) {
     // --- F열 (외화 총잔액) 계산 ---
     currentTotalBalance += amount; // 현재 행의 외화 금액을 누적 잔액에 더함
     fValues.push(currentTotalBalance); // F열 (외화 총잔액)에 추가
-
+    
     // 현재 행의 계산이 끝난 후 H, I 값을 배열에 푸시
     hValues.push(hValue);
     iValues.push(iValue);
 
     // --- *** 다음 행 계산을 위해 리셋 인덱스 업데이트 (현재 행 처리 후) *** ---
     // 현재 누적 잔액 (currentTotalBalance)이 RESET_THRESHOLD 미만이면 리셋 지점
-    if (!isNaN(currentTotalBalance) && currentTotalBalance < RESET_THRESHOLD) {
-      lastResetRowIndex = currentRowIndexInData; // 현재 처리 중인 행의 인덱스를 리셋 지점으로 기록
-      Logger.log("Reset index updated to " + lastResetRowIndex + " based on total balance check at row " + currentRowInSheet + ". New Balance: " + currentTotalBalance);
-      // buyLots 배열을 여기서 비우지 않아도, 다음 루프에서 currentLastResetIndex 기준으로 필터링하므로 문제 없음
+    if (!isNaN(currentTotalBalance) && Math.abs(currentTotalBalance) < RESET_THRESHOLD) { // <<<<<< 수정: Math.abs() 사용 및 RESET_THRESHOLD는 매우 작은 값
+      lastResetRowIndex = currentRowIndexInData;
+      Logger.log("Reset index updated to " + lastResetRowIndex + " based on total balance check at row " + currentRowInSheet + ". New Balance: " + currentTotalBalance.toPrecision(10));
     }
 
   } // End of data loop (Pass 1)
