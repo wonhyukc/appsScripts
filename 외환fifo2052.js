@@ -2,6 +2,7 @@
  * @OnlyCurrentDoc
  */
 /*
+	20250530 loger.log 주석 처리
 	20250530 거래기간 계산 추가
 	20250530 잔고계산 정상. 0.2 제한 으로 인한 문제 제거
 	20250223 FIFO 처리 완료
@@ -77,7 +78,7 @@ function onEdit(e) {
     }
 
 
-    Logger.log(`onEdit for ${sheetName}: 현재 입력된 금액 (C열): ${currentAmount}, 직전 행 외화 잔고 (F열): ${prevBalance}`);
+    //logger.log(`onEdit for ${sheetName}: 현재 입력된 금액 (C열): ${currentAmount}, 직전 행 외화 잔고 (F열): ${prevBalance}`);
 
     if (Math.abs(currentAmount) > prevBalance + RESET_THRESHOLD) { // RESET_THRESHOLD를 고려하여 비교
       ui.alert(
@@ -95,7 +96,7 @@ function onEdit(e) {
       updateFIFOAndWrite(sheet);
     } catch (error) {
       SpreadsheetApp.getActiveSpreadsheet().toast(`FIFO 계산 중 오류 발생 (${sheetName}): ` + error.message, "오류", 30);
-      Logger.log(`Error during FIFO update for ${sheetName}: ` + error);
+      //logger.log(`Error during FIFO update for ${sheetName}: ` + error);
     }
   }
 }
@@ -106,11 +107,11 @@ function onEdit(e) {
  */
 function updateFIFOAndWrite(currentSheet) {
   const sheetName = currentSheet.getName();
-  Logger.log(`updateFIFOAndWrite called for sheet: ${sheetName}`);
+  //logger.log(`updateFIFOAndWrite called for sheet: ${sheetName}`);
 
   const lastRow = currentSheet.getLastRow();
   if (lastRow <= HEADER_ROW) {
-    Logger.log(`No data found below header row in sheet: ${sheetName}. Last row: ${lastRow}`);
+    //logger.log(`No data found below header row in sheet: ${sheetName}. Last row: ${lastRow}`);
     // 데이터가 없을 경우, 기존 계산된 값(F,G,H,I,O)을 지울 수 있습니다.
     const numColsToClear = COL_O_DURATION - COL_F_BALANCE + 1; // F열부터 O열까지의 컬럼 수
     if (currentSheet.getMaxRows() > HEADER_ROW) { // 시트에 행이 헤더 이상으로 존재할 때만 실행
@@ -123,7 +124,7 @@ function updateFIFOAndWrite(currentSheet) {
   const data = dataRange.getValues();
 
   if (data.length === 0) {
-    Logger.log(`No data values found in dataRange for sheet: ${sheetName}.`);
+    //logger.log(`No data values found in dataRange for sheet: ${sheetName}.`);
     return;
   }
 
@@ -146,7 +147,7 @@ function updateFIFOAndWrite(currentSheet) {
     
     SpreadsheetApp.flush(); // 변경사항 즉시 반영
   } else {
-    Logger.log(`No results to write or empty results for sheet: ${sheetName}.`);
+    //logger.log(`No results to write or empty results for sheet: ${sheetName}.`);
     // 이 경우에도 기존 계산된 값을 지울 수 있습니다.
     // const numColsToClear = COL_O_DURATION - COL_F_BALANCE + 1;
     // currentSheet.getRange(HEADER_ROW + 1, COL_F_BALANCE, data.length, numColsToClear).clearContent();
@@ -193,7 +194,7 @@ function calculateFIFO(data, sheetNameForLog) {
     if (dateValue && (typeof dateValue.getTime === 'function' || !isNaN(new Date(dateValue).getTime()))) {
       currentDate = new Date(dateValue);
     } else {
-      Logger.log(logPrefix + "Invalid or missing date at sheet row " + currentRowInSheet + ". Value: " + dateValue);
+      //logger.log(logPrefix + "Invalid or missing date at sheet row " + currentRowInSheet + ". Value: " + dateValue);
     }
 
     // C열 또는 D열(매도 시 환율)이 유효한 숫자가 아니면 계산 로직 건너뛰기
@@ -208,13 +209,13 @@ function calculateFIFO(data, sheetNameForLog) {
           rowIndex: currentRowIndexInData,
           date: currentDate // 매수 날짜 저장 - 추가
         });
-        Logger.log(logPrefix + "Buy Lot Added: SheetRow " + currentRowInSheet + ", Qty: " + amount + ", Rate: " + rate + ", Date: " + currentDate.toISOString().slice(0,10));
+        //logger.log(logPrefix + "Buy Lot Added: SheetRow " + currentRowInSheet + ", Qty: " + amount + ", Rate: " + rate + ", Date: " + currentDate.toISOString().slice(0,10));
       } else {
-         Logger.log(logPrefix + "Skipping buy lot due to invalid date at sheet row " + currentRowInSheet);
+         //logger.log(logPrefix + "Skipping buy lot due to invalid date at sheet row " + currentRowInSheet);
       }
       // 매수 건이므로 hValue, iValue, oValue는 null
     } else if (amount < 0) { // 매도 건
-        Logger.log(logPrefix + "--- Processing Sell SheetRow: " + currentRowInSheet + ", Amount: " + amount + (currentDate ? ", Date: " + currentDate.toISOString().slice(0,10) : ", Date: N/A") + " ---");
+        //logger.log(logPrefix + "--- Processing Sell SheetRow: " + currentRowInSheet + ", Amount: " + amount + (currentDate ? ", Date: " + currentDate.toISOString().slice(0,10) : ", Date: N/A") + " ---");
         
         const amountToCover = Math.abs(amount);
         let totalFifoCost = 0;
@@ -224,7 +225,7 @@ function calculateFIFO(data, sheetNameForLog) {
         let consumedLotsDetailsForDuration = []; // 이번 매도 건에 소진된 로트 정보 (기간 계산용) - 추가
 
         // [1] 같은 금액 매칭 시도
-        Logger.log(logPrefix + "Checking for exact match for amount: " + amountToCover.toPrecision(10));
+        //logger.log(logPrefix + "Checking for exact match for amount: " + amountToCover.toPrecision(10));
         for (let lotIndex = 0; lotIndex < buyLots.length; lotIndex++) {
           let lot = buyLots[lotIndex];
           if (lot.rowIndex > currentLastResetIndex &&
@@ -242,14 +243,14 @@ function calculateFIFO(data, sheetNameForLog) {
                 const daysHeld = (currentDate.getTime() - lot.date.getTime()) / (1000 * 60 * 60 * 24);
                 consumedLotsDetailsForDuration.push({ qty: amountToCover, days: daysHeld });
             }
-            Logger.log(logPrefix + " Exact match FOUND! Consumed lot from original sheetRow " + (lot.rowIndex + HEADER_ROW + 1) + " (Date: " + (lot.date ? lot.date.toISOString().slice(0,10) : 'N/A') + "). Cost: " + totalFifoCost.toPrecision(10) + ". Sell qty left: " + remainingSellQty.toPrecision(10));
+            //logger.log(logPrefix + " Exact match FOUND! Consumed lot from original sheetRow " + (lot.rowIndex + HEADER_ROW + 1) + " (Date: " + (lot.date ? lot.date.toISOString().slice(0,10) : 'N/A') + "). Cost: " + totalFifoCost.toPrecision(10) + ". Sell qty left: " + remainingSellQty.toPrecision(10));
             break;
           }
         }
 
         // [2] 표준 FIFO 처리
         if (!foundExactMatch && remainingSellQty > RESET_THRESHOLD) {
-          Logger.log(logPrefix + "Exact match not found or sell qty > 0. Standard FIFO for: " + remainingSellQty.toPrecision(10));
+          //logger.log(logPrefix + "Exact match not found or sell qty > 0. Standard FIFO for: " + remainingSellQty.toPrecision(10));
           for (let lotIndex = 0; lotIndex < buyLots.length; lotIndex++) {
             let lot = buyLots[lotIndex];
             if (lot.rowIndex > currentLastResetIndex && lot.remainingQty > RESET_THRESHOLD) { // 남은 수량이 유의미한 경우
@@ -264,23 +265,22 @@ function calculateFIFO(data, sheetNameForLog) {
                   const daysHeld = (currentDate.getTime() - lot.date.getTime()) / (1000 * 60 * 60 * 24);
                   consumedLotsDetailsForDuration.push({ qty: consumeAmount, days: daysHeld });
               }
-              Logger.log(logPrefix + "  FIFO: Consumed " + consumeAmount.toPrecision(10) + " from lot at original sheetRow " + (lot.rowIndex + HEADER_ROW + 1) + " (Date: " + (lot.date ? lot.date.toISOString().slice(0,10) : 'N/A') + ")" +
-                         ". New lot remaining: " + lot.remainingQty.toPrecision(10) + ". Sell qty left: " + remainingSellQty.toPrecision(10));
+              //logger.log(logPrefix + "  FIFO: Consumed " + consumeAmount.toPrecision(10) + " from lot at original sheetRow " + (lot.rowIndex + HEADER_ROW + 1) + " (Date: " + (lot.date ? lot.date.toISOString().slice(0,10) : 'N/A') + ")" + ". New lot remaining: " + lot.remainingQty.toPrecision(10) + ". Sell qty left: " + remainingSellQty.toPrecision(10));
               
               if (remainingSellQty < RESET_THRESHOLD) {
                   remainingSellQty = 0; // 매우 작은 값은 0으로 처리
-                  Logger.log(logPrefix + "  Sell qty near zero, set to 0. Breaking FIFO loop.");
+                  //logger.log(logPrefix + "  Sell qty near zero, set to 0. Breaking FIFO loop.");
                   break;
               }
             }
           }
         }
 
-        Logger.log(logPrefix + "After FIFO, final remainingSellQty: " + remainingSellQty.toPrecision(10));
+        //logger.log(logPrefix + "After FIFO, final remainingSellQty: " + remainingSellQty.toPrecision(10));
 
         if (remainingSellQty > RESET_THRESHOLD) { // 매도할 재고 부족
           hValue = "#N/A"; iValue = "#N/A"; oValue = "#N/A"; // 기간도 N/A 처리 - 추가
-          Logger.log(logPrefix + "Insufficient buy lots for sell at sheetRow " + currentRowInSheet + ". Needed: " + remainingSellQty.toPrecision(10) + ". H, I, O set to #N/A.");
+          //logger.log(logPrefix + "Insufficient buy lots for sell at sheetRow " + currentRowInSheet + ". Needed: " + remainingSellQty.toPrecision(10) + ". H, I, O set to #N/A.");
         } else { // 매도 재고 충분 또는 정확히 매도 완료
           hValue = totalFifoCost;
           if (!isNaN(krwAmount) && typeof hValue === 'number') {
@@ -289,7 +289,7 @@ function calculateFIFO(data, sheetNameForLog) {
             iValue = "#N/A";
           } else { // 기타 계산 오류
             iValue = "#ERROR_I";
-            Logger.log(logPrefix + "Error calculating I value for sheetRow " + currentRowInSheet + ". E=" + krwAmount + ", H=" + hValue);
+            //logger.log(logPrefix + "Error calculating I value for sheetRow " + currentRowInSheet + ". E=" + krwAmount + ", H=" + hValue);
           }
 
           // 기간 계산 (가중 평균) - 추가
@@ -305,17 +305,17 @@ function calculateFIFO(data, sheetNameForLog) {
               if (totalQuantityForDuration > RESET_THRESHOLD) {
                   oValue = totalWeightedDays / totalQuantityForDuration;
                   oValue = Math.round(oValue); // 일 단위로 반올림
-                  Logger.log(logPrefix + "Calculated weighted avg duration: " + oValue + " days for sold qty: " + totalQuantityForDuration.toPrecision(10) + " at sheetRow " + currentRowInSheet);
+                  //logger.log(logPrefix + "Calculated weighted avg duration: " + oValue + " days for sold qty: " + totalQuantityForDuration.toPrecision(10) + " at sheetRow " + currentRowInSheet);
               } else {
                   oValue = null; // 또는 에러 표시
-                  Logger.log(logPrefix + "Cannot calculate duration: total qty for duration is zero or invalid at sheetRow " + currentRowInSheet);
+                  //logger.log(logPrefix + "Cannot calculate duration: total qty for duration is zero or invalid at sheetRow " + currentRowInSheet);
               }
           } else if (Math.abs(amountToCover) > RESET_THRESHOLD && (!currentDate || isNaN(currentDate.getTime()))) { // 매도 수량은 있지만 현재 날짜가 유효하지 않은 경우
               oValue = "#NO_DATE"; // 기간 계산 불가
-              Logger.log(logPrefix + "Cannot calculate duration due to invalid current date at sheetRow " + currentRowInSheet);
+              //logger.log(logPrefix + "Cannot calculate duration due to invalid current date at sheetRow " + currentRowInSheet);
           } else if (Math.abs(amountToCover) > RESET_THRESHOLD && consumedLotsDetailsForDuration.length === 0) { // 매도 수량은 있으나 소진된 로트 정보가 없는 경우 (로직 오류 또는 초기 재고 문제)
               oValue = "#NO_LOTS"; 
-              Logger.log(logPrefix + "Warning: Sold amount exists but no consumed lot details for duration calculation at sheetRow " + currentRowInSheet);
+              //logger.log(logPrefix + "Warning: Sold amount exists but no consumed lot details for duration calculation at sheetRow " + currentRowInSheet);
           }
           // 만약 amountToCover 자체가 0에 가까웠다면 (C열에 0 입력) oValue는 null로 유지됨
         }
@@ -330,14 +330,14 @@ function calculateFIFO(data, sheetNameForLog) {
 
     if (!isNaN(currentTotalBalance) && Math.abs(currentTotalBalance) < RESET_THRESHOLD) {
       lastResetRowIndex = currentRowIndexInData;
-      Logger.log(logPrefix + "Reset index updated to " + lastResetRowIndex + " (data index) based on total balance at sheetRow " + currentRowInSheet + ". New Balance: " + currentTotalBalance.toPrecision(10));
+      //logger.log(logPrefix + "Reset index updated to " + lastResetRowIndex + " (data index) based on total balance at sheetRow " + currentRowInSheet + ". New Balance: " + currentTotalBalance.toPrecision(10));
     } else if (isNaN(currentTotalBalance)) {
-        Logger.log(logPrefix + "Warning: currentTotalBalance is NaN at sheetRow " + currentRowInSheet);
+        //logger.log(logPrefix + "Warning: currentTotalBalance is NaN at sheetRow " + currentRowInSheet);
     }
   } // End of data loop
 
   // --- 2단계: 최종 매수 재고 상태를 기반으로 G열 (거래후잔액) 계산 ---
-  Logger.log(logPrefix + "--- Calculating G values (Pass 2) ---");
+  //logger.log(logPrefix + "--- Calculating G values (Pass 2) ---");
   for (let i = 0; i < data.length; i++) {
       const amount = Number(data[i][COL_C_AMOUNT - 1] || 0);
       let gValue = null;
@@ -350,14 +350,14 @@ function calculateFIFO(data, sheetNameForLog) {
               gValue = (Math.abs(lotState.remainingQty) < RESET_THRESHOLD) ? 0 : lotState.remainingQty;
           } else {
               gValue = 0; // buyLots에 추가되지 않은 매수건 (예: 날짜 오류) 또는 로직 오류
-              Logger.log(logPrefix + "Warning: Could not find buyLot state for data index " + i + " (sheetRow " + (i + HEADER_ROW + 1) + ") for G value.");
+              //logger.log(logPrefix + "Warning: Could not find buyLot state for data index " + i + " (sheetRow " + (i + HEADER_ROW + 1) + ") for G value.");
           }
       } else { // 매도 건이거나 금액이 0인 경우 G열은 0
           gValue = 0;
       }
       gValues.push(gValue);
   }
-  Logger.log(logPrefix + "--- FIFO Calculation Complete ---");
+  //logger.log(logPrefix + "--- FIFO Calculation Complete ---");
 
   return { fValues, gValues, hValues, iValues, oValues }; // oValues 포함하여 반환 - 추가
 }
